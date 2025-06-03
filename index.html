@@ -117,8 +117,12 @@
 <body>
     <div class="split-view-container">
         <div class="editor-pane" id="editor-pane">
-            <label for="html-editor" class="sr-only">HTML Code Editor</label>
-            <textarea id="html-editor"></textarea>
+            <label id="html-editor-label" class="sr-only">HTML Code Editor</label>
+            <textarea
+              id="html-editor"
+              aria-hidden="true"
+              tabindex="-1"
+            ></textarea>
         </div>
         <div class="splitter" id="splitter" title="Drag to resize panes"></div>
         <div class="preview-pane" id="preview-pane">
@@ -239,7 +243,7 @@
             });
 
             const cmWrapper = editorInstance.getWrapperElement();
-            cmWrapper.setAttribute("aria-label", "HTML Code Editor");
+            cmWrapper.setAttribute("aria-labelledby", "html-editor-label");
 
             if (initialHtmlContent) {
                 editorInstance.setValue(initialHtmlContent);
