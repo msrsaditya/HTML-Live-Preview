@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Edit and Preview your HTML code in real-time with improved performance.">
-    <title>HTML Live Preview (Optimized)</title>
+    <meta name="description" content="Edit and Preview your HTML code in real-time">
+    <title>HTML Live Preview</title>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/theme/material-darker.min.css">
@@ -122,7 +122,7 @@
         </div>
         <div class="splitter" id="splitter" title="Drag to resize panes"></div>
         <div class="preview-pane" id="preview-pane">
-            <iframe class="preview-iframe" id="preview-iframe" sandbox="allow-scripts allow-same-origin allow-popups allow-forms" title="HTML Preview Content"></iframe>
+            <iframe class="preview-iframe" id="preview-iframe" sandbox="allow-scripts allow-popups allow-forms" title="HTML Preview Content"></iframe>
         </div>
     </div>
 
@@ -151,7 +151,7 @@
 </html>`;
 
         const MIN_PANE_PERCENTAGE = 0.05;
-        const PREVIEW_UPDATE_DEBOUNCE_MS = 250;
+        const PREVIEW_UPDATE_DEBOUNCE_MS = 0;
 
         let editorInstance;
         let previewIframeElement;
