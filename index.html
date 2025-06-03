@@ -238,6 +238,9 @@
                 extraKeys: { "Ctrl-/": "toggleComment" }
             });
 
+            const cmWrapper = editorInstance.getWrapperElement();
+            cmWrapper.setAttribute("aria-label", "HTML Code Editor");
+
             if (initialHtmlContent) {
                 editorInstance.setValue(initialHtmlContent);
             }
