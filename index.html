@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Edit and Preview your HTML code in real-time">
-    <title>HTML Live Preview</title>
+    <meta name="description" content="Edit and Preview your HTML code in real-time with improved performance.">
+    <title>HTML Live Preview (Optimized)</title>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/theme/material-darker.min.css">
@@ -35,6 +35,18 @@
             flex-direction: column;
             overflow: hidden;
             position: relative;
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border-width: 0;
         }
 
         .CodeMirror {
@@ -105,25 +117,26 @@
 <body>
     <div class="split-view-container">
         <div class="editor-pane" id="editor-pane">
+            <label for="html-editor" class="sr-only">HTML Code Editor</label>
             <textarea id="html-editor"></textarea>
         </div>
         <div class="splitter" id="splitter" title="Drag to resize panes"></div>
         <div class="preview-pane" id="preview-pane">
-            <iframe class="preview-iframe" id="preview-iframe" sandbox="allow-scripts allow-same-origin allow-popups allow-forms" title="HTML Preview"></iframe>
+            <iframe class="preview-iframe" id="preview-iframe" sandbox="allow-scripts allow-same-origin allow-popups allow-forms" title="HTML Preview Content"></iframe>
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/xml/xml.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/javascript/javascript.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/css/css.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/htmlmixed/htmlmixed.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/edit/closetag.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/edit/closebrackets.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/selection/active-line.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/comment/comment.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/xml/xml.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/javascript/javascript.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/css/css.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/htmlmixed/htmlmixed.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/edit/closetag.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/edit/closebrackets.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/selection/active-line.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/comment/comment.js" defer></script>
 
-    <script>
+    <script defer>
         const initialHtmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -138,6 +151,7 @@
 </html>`;
 
         const MIN_PANE_PERCENTAGE = 0.05;
+        const PREVIEW_UPDATE_DEBOUNCE_MS = 250;
 
         let editorInstance;
         let previewIframeElement;
@@ -146,6 +160,7 @@
         let splitterElement;
         let splitViewContainerElement;
         let isDraggingSplitter = false;
+        let currentEditorPanePercentage = 0.5;
 
         function debounce(func, delay) {
             let timeout;
@@ -162,17 +177,36 @@
             }
         }
 
-        const debouncedUpdatePreview = debounce(updatePreview, 0);
+        const debouncedUpdatePreview = debounce(updatePreview, PREVIEW_UPDATE_DEBOUNCE_MS);
 
-        function setInitialPaneSizes() {
+        function applyPaneSizes(editorPercent) {
             if (!splitViewContainerElement || !editorPaneElement || !previewPaneElement || !splitterElement) return;
+
             const containerWidth = splitViewContainerElement.offsetWidth;
             const splitterWidth = splitterElement.offsetWidth;
-            const initialEditorWidth = (containerWidth - splitterWidth) / 2;
-            const initialPreviewWidth = (containerWidth - splitterWidth) / 2;
 
-            editorPaneElement.style.width = (initialEditorWidth / containerWidth * 100) + '%';
-            previewPaneElement.style.width = (initialPreviewWidth / containerWidth * 100) + '%';
+            const minEditorPercent = MIN_PANE_PERCENTAGE;
+            const maxEditorPercent = 1 - MIN_PANE_PERCENTAGE - (splitterWidth / containerWidth);
+
+            let targetEditorPercent = Math.max(minEditorPercent, Math.min(editorPercent, maxEditorPercent));
+
+            const newEditorWidth = (containerWidth - splitterWidth) * targetEditorPercent;
+            const newPreviewWidth = containerWidth - newEditorWidth - splitterWidth;
+
+            editorPaneElement.style.width = (newEditorWidth / containerWidth * 100) + '%';
+            previewPaneElement.style.width = (newPreviewWidth / containerWidth * 100) + '%';
+
+            if (containerWidth - splitterWidth > 0) {
+                 currentEditorPanePercentage = newEditorWidth / (containerWidth - splitterWidth);
+            }
+
+            if (editorInstance) {
+                editorInstance.refresh();
+            }
+        }
+
+        function setInitialPaneSizes() {
+            applyPaneSizes(currentEditorPanePercentage);
         }
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -182,6 +216,11 @@
             previewPaneElement = document.getElementById('preview-pane');
             splitterElement = document.getElementById('splitter');
             splitViewContainerElement = document.querySelector('.split-view-container');
+
+            if (!htmlEditorTextarea || !previewIframeElement || !editorPaneElement || !previewPaneElement || !splitterElement || !splitViewContainerElement) {
+                console.error("One or more essential UI elements are missing. App cannot initialize.");
+                return;
+            }
 
             setInitialPaneSizes();
 
@@ -219,28 +258,16 @@
 
                 const containerRect = splitViewContainerElement.getBoundingClientRect();
                 const splitterWidth = splitterElement.offsetWidth;
+                const containerWidth = containerRect.width;
 
-                const minPixelPaneWidth = containerRect.width * MIN_PANE_PERCENTAGE;
+                let newEditorPixelWidth = e.clientX - containerRect.left;
 
-                let newEditorWidth = e.clientX - containerRect.left;
-
-                if (newEditorWidth < minPixelPaneWidth) {
-                    newEditorWidth = minPixelPaneWidth;
+                let newEditorPercent = 0;
+                if (containerWidth - splitterWidth > 0) {
+                    newEditorPercent = newEditorPixelWidth / (containerWidth - splitterWidth);
                 }
 
-                const maxEditorWidth = containerRect.width - splitterWidth - minPixelPaneWidth;
-                if (newEditorWidth > maxEditorWidth) {
-                    newEditorWidth = maxEditorWidth;
-                }
-
-                const newPreviewWidth = containerRect.width - newEditorWidth - splitterWidth;
-
-                editorPaneElement.style.width = (newEditorWidth / containerRect.width * 100) + '%';
-                previewPaneElement.style.width = (newPreviewWidth / containerRect.width * 100) + '%';
-
-                if (editorInstance) {
-                    editorInstance.refresh();
-                }
+                applyPaneSizes(newEditorPercent);
             });
 
             document.addEventListener('mouseup', () => {
@@ -253,10 +280,7 @@
             });
 
             window.addEventListener('resize', debounce(() => {
-                setInitialPaneSizes();
-                if (editorInstance) {
-                     editorInstance.refresh();
-                }
+                applyPaneSizes(currentEditorPanePercentage);
             }, 50));
         });
     </script>
