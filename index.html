@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Edit and Preview your HTML code in real-time">
+    <title>HTML Live Preview</title>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/theme/material-darker.min.css">
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+
+        .split-view-container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        .editor-pane {
+            height: 100%;
+            background-color: #212121;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .CodeMirror {
+            flex-grow: 1;
+            height: 100% !important;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .CodeMirror-gutters {
+            background-color: #212121 !important;
+            border-right: 1px solid #303030;
+        }
+        .CodeMirror-linenumber {
+            color: #858585;
+            padding: 0 3px 0 5px;
+        }
+        .CodeMirror-focused .CodeMirror-selected {
+            background-color: #3a3d41;
+        }
+        .cm-s-material-darker.CodeMirror {
+             background-color: #212121;
+             color: #e0e0e0;
+        }
+        .cm-s-material-darker .CodeMirror-cursor {
+            border-left: 1px solid #f8f8f0;
+        }
+
+        .splitter {
+            width: 8px;
+            height: 100%;
+            background-color: #333333;
+            cursor: col-resize;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+        .splitter:hover {
+            background-color: #4a4a4a;
+        }
+        .splitter::before {
+            content: '···';
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            color: #666;
+            font-size: 10px;
+            line-height: 0;
+        }
+
+        .preview-pane {
+            height: 100%;
+            background-color: #ffffff;
+            overflow: auto;
+            flex-grow: 1;
+            position: relative;
+            display: block;
+        }
+
+        .preview-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="split-view-container">
+        <div class="editor-pane" id="editor-pane">
+            <textarea id="html-editor"></textarea>
+        </div>
+        <div class="splitter" id="splitter" title="Drag to resize panes"></div>
+        <div class="preview-pane" id="preview-pane">
+            <iframe class="preview-iframe" id="preview-iframe" sandbox="allow-scripts allow-same-origin allow-popups allow-forms" title="HTML Preview"></iframe>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/xml/xml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/css/css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/htmlmixed/htmlmixed.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/edit/closetag.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/edit/closebrackets.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/selection/active-line.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/comment/comment.js"></script>
+
+    <script>
+        const initialHtmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Document</title>
+</head>
+<body>
+    <p>
+        Your website will be displayed here...
+    </p>
+</body>
+</html>`;
+
+        const MIN_PANE_PERCENTAGE = 0.05;
+
+        let editorInstance;
+        let previewIframeElement;
+        let editorPaneElement;
+        let previewPaneElement;
+        let splitterElement;
+        let splitViewContainerElement;
+        let isDraggingSplitter = false;
+
+        function debounce(func, delay) {
+            let timeout;
+            return function(...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), delay);
+            };
+        }
+
+        function updatePreview() {
+            if (editorInstance && previewIframeElement) {
+                const currentCode = editorInstance.getValue();
+                previewIframeElement.srcdoc = currentCode;
+            }
+        }
+
+        const debouncedUpdatePreview = debounce(updatePreview, 0);
+
+        function setInitialPaneSizes() {
+            if (!splitViewContainerElement || !editorPaneElement || !previewPaneElement || !splitterElement) return;
+            const containerWidth = splitViewContainerElement.offsetWidth;
+            const splitterWidth = splitterElement.offsetWidth;
+            const initialEditorWidth = (containerWidth - splitterWidth) / 2;
+            const initialPreviewWidth = (containerWidth - splitterWidth) / 2;
+
+            editorPaneElement.style.width = (initialEditorWidth / containerWidth * 100) + '%';
+            previewPaneElement.style.width = (initialPreviewWidth / containerWidth * 100) + '%';
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const htmlEditorTextarea = document.getElementById('html-editor');
+            previewIframeElement = document.getElementById('preview-iframe');
+            editorPaneElement = document.getElementById('editor-pane');
+            previewPaneElement = document.getElementById('preview-pane');
+            splitterElement = document.getElementById('splitter');
+            splitViewContainerElement = document.querySelector('.split-view-container');
+
+            setInitialPaneSizes();
+
+            editorInstance = CodeMirror.fromTextArea(htmlEditorTextarea, {
+                mode: 'htmlmixed',
+                theme: 'material-darker',
+                lineNumbers: true,
+                lineWrapping: true,
+                autoCloseTags: true,
+                autoCloseBrackets: true,
+                styleActiveLine: true,
+                indentUnit: 2,
+                tabSize: 2,
+                smartIndent: true,
+                extraKeys: { "Ctrl-/": "toggleComment" }
+            });
+
+            if (initialHtmlContent) {
+                editorInstance.setValue(initialHtmlContent);
+            }
+            updatePreview();
+
+            editorInstance.on('change', debouncedUpdatePreview);
+
+            splitterElement.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                isDraggingSplitter = true;
+                document.body.style.userSelect = 'none';
+                document.body.style.cursor = 'col-resize';
+                previewIframeElement.style.pointerEvents = 'none';
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDraggingSplitter) return;
+
+                const containerRect = splitViewContainerElement.getBoundingClientRect();
+                const splitterWidth = splitterElement.offsetWidth;
+
+                const minPixelPaneWidth = containerRect.width * MIN_PANE_PERCENTAGE;
+
+                let newEditorWidth = e.clientX - containerRect.left;
+
+                if (newEditorWidth < minPixelPaneWidth) {
+                    newEditorWidth = minPixelPaneWidth;
+                }
+
+                const maxEditorWidth = containerRect.width - splitterWidth - minPixelPaneWidth;
+                if (newEditorWidth > maxEditorWidth) {
+                    newEditorWidth = maxEditorWidth;
+                }
+
+                const newPreviewWidth = containerRect.width - newEditorWidth - splitterWidth;
+
+                editorPaneElement.style.width = (newEditorWidth / containerRect.width * 100) + '%';
+                previewPaneElement.style.width = (newPreviewWidth / containerRect.width * 100) + '%';
+
+                if (editorInstance) {
+                    editorInstance.refresh();
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (isDraggingSplitter) {
+                    isDraggingSplitter = false;
+                    document.body.style.userSelect = '';
+                    document.body.style.cursor = 'default';
+                    previewIframeElement.style.pointerEvents = 'auto';
+                }
+            });
+
+            window.addEventListener('resize', debounce(() => {
+                setInitialPaneSizes();
+                if (editorInstance) {
+                     editorInstance.refresh();
+                }
+            }, 50));
+        });
+    </script>
+</body>
+</html>
